@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.dengzii"
-version = "1.0"
+version = "1.2"
 
 repositories {
     mavenCentral()
@@ -17,7 +17,7 @@ intellij {
     version.set("2023.2.6")
     type.set("IC") // Target IDE Platform
 
-    plugins.set(listOf(/* Plugin Dependencies */))
+    plugins.set(listOf("Dart:232.10300.41"))
 }
 
 tasks {
@@ -44,4 +44,17 @@ tasks {
     publishPlugin {
         token.set(System.getenv("PUBLISH_TOKEN"))
     }
+
+    dependencies {
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    }
+
+//    val jbrExplicitVersion = "jbr_jcef-17.0.10-osx-aarch64-b1000.48"
+//
+//    buildSearchableOptions {
+//        jbrVersion.set(jbrExplicitVersion)
+//    }
+//    runIde {
+//        jbrVersion.set(jbrExplicitVersion)
+//    }
 }
