@@ -12,6 +12,7 @@ import com.jetbrains.lang.dart.psi.DartFile
 import com.jetbrains.lang.dart.psi.impl.DartImportStatementImpl
 import com.jetbrains.lang.dart.psi.impl.DartVarDeclarationListImpl
 import com.jetbrains.lang.dart.util.DartElementGenerator
+import org.apache.tools.ant.util.FirstMatchMapper
 
 class JsonToDart(private val param: GenerateParam?, name: String, input: String) :
     Json2EntityParser(name, input, param) {
@@ -24,12 +25,12 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
     private val project = param!!.project
 
     private val primitiveTypeRefers = mapOf(
-        JsonType.UNKNOWN.uniqueId to TypeRefer("dynamic", "dynamic", "", "", builtIn = true),
-        JsonType.STRING.uniqueId to TypeRefer("String", "String", "", "", builtIn = true),
-        JsonType.INT.uniqueId to TypeRefer("int", "int", "", "", builtIn = true),
-        JsonType.BOOL.uniqueId to TypeRefer("bool", "bool", "", "", builtIn = true),
-        JsonType.FLOAT.uniqueId to TypeRefer("num", "num", "", "", builtIn = true),
-        JsonType.DOUBLE.uniqueId to TypeRefer("num", "num", "", "", builtIn = true),
+        JsonType.UNKNOWN.uniqueId to TypeRefer("dynamic", "dynamic", "", ""),
+        JsonType.STRING.uniqueId to TypeRefer("String", "String", "", ""),
+        JsonType.INT.uniqueId to TypeRefer("int", "int", "", ""),
+        JsonType.BOOL.uniqueId to TypeRefer("bool", "bool", "", ""),
+        JsonType.FLOAT.uniqueId to TypeRefer("num", "num", "", ""),
+        JsonType.DOUBLE.uniqueId to TypeRefer("num", "num", "", ""),
     )
 
     private val primitiveRefers = primitiveTypeRefers.values
@@ -42,6 +43,10 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
         val entityName = naming.nameEntity(name)
         val fileName = naming.nameFile(name, "dart")
         generateFile(type, fileName, entityName, fields)
+        if (param!!.directory.findFile(fileName) != null) {
+            log("file exist, skip $fileName")
+            return TypeRefer(entityName, fileName, "", "")
+        }
         log("gen type => $fileName, $entityName")
         return TypeRefer(entityName, fileName, "", "")
     }
@@ -64,9 +69,9 @@ class $entityName {
         ${fieldsNamed.map { (key, _) -> "\trequired this.$key" }.joinToString(",\n")},
     });
     
-    factory $entityName.fromJson(Map<String, dynamic> json) {
+    factory $entityName.fromJson(dynamic json) {
         return $entityName(
-            ${fieldsNamed.map { (k, t) -> genFieldFromJson(k, t) }.joinToString(",\n")},
+            ${fields.map { (k, t) -> genFieldFromJson(k, t) }.joinToString(",\n")},
         );
     }
 }
@@ -95,7 +100,7 @@ class $entityName {
         val value = if (refer !in primitiveRefers) {
             if (refer.array) {
                 if (refer.copy(array = false) in primitiveRefers) {
-                    "json['$name'] != null \n? ${refer.name}.fromJson(json['$name']) \n: null"
+                    "json['$name'] != null \n? json['$name'].map((e) => e).toList() \n: []"
                 } else {
                     "json['$name'] != null \n? json['$name'].map((e) => ${refer.name}.fromJson(e)).toList() \n: []"
                 }
@@ -112,7 +117,7 @@ class $entityName {
                 else -> "json['$name']"
             }
         }
-        return "$name: $value"
+        return "${naming.nameFiled(name)}: $value"
     }
 
     private fun fieldDeclare(name: String, refer: TypeRefer): String {

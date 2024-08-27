@@ -4,6 +4,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.ui.DialogWrapper
 import json2entity.InputJsonForm
 import org.jetbrains.annotations.Nullable
+import java.awt.Dimension
 import javax.swing.JComponent
 
 class InputJsonDialog(private val e: AnActionEvent) : DialogWrapper(null, false, IdeModalityType.MODELESS) {
@@ -19,6 +20,9 @@ class InputJsonDialog(private val e: AnActionEvent) : DialogWrapper(null, false,
     @Nullable
     override fun createCenterPanel(): JComponent {
         form = InputJsonForm()
+        isModal = true
+        isResizable = true
+        form.panel1.preferredSize = Dimension(800, 500)
         return form.panel1
     }
 

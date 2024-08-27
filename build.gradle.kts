@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.dengzii"
-version = "1.2"
+version = "2024.8.1"
 
 repositories {
     mavenCentral()

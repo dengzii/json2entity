@@ -9,7 +9,7 @@ interface Naming {
 class DefaultNaming : Naming {
     override fun nameFiled(name: String): String {
         return name.trim('_').split('_').joinToString("") { it.replaceFirstChar { c -> c.uppercase() } }
-            .replaceFirstChar { c -> c.uppercase() }
+            .replaceFirstChar { c -> c.lowercaseChar() }
     }
 
     override fun nameEntity(name: String): String {

@@ -31,7 +31,8 @@
     </extensions>
     <actions>
         <action id="com.dengzii.plugin.j2e.generate" class="com.dengzii.json2entity.Json2EntityAction"
-                text="Json to Entity">
+                text="Json to Dart Entity"
+                icon="com.intellij.icons.ExpUiIcons.FileTypes.Json">
             <add-to-group group-id="NewGroup" anchor="first"/>
         </action>
     </actions>
