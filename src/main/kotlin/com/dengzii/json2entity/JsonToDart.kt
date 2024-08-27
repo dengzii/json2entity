@@ -12,7 +12,6 @@ import com.jetbrains.lang.dart.psi.DartFile
 import com.jetbrains.lang.dart.psi.impl.DartImportStatementImpl
 import com.jetbrains.lang.dart.psi.impl.DartVarDeclarationListImpl
 import com.jetbrains.lang.dart.util.DartElementGenerator
-import org.apache.tools.ant.util.FirstMatchMapper
 
 class JsonToDart(private val param: GenerateParam?, name: String, input: String) :
     Json2EntityParser(name, input, param) {
@@ -24,8 +23,9 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
 
     private val project = param!!.project
 
+    private val dynamic = TypeRefer("dynamic", "dynamic", "", "")
+
     private val primitiveTypeRefers = mapOf(
-        JsonType.UNKNOWN.uniqueId to TypeRefer("dynamic", "dynamic", "", ""),
         JsonType.STRING.uniqueId to TypeRefer("String", "String", "", ""),
         JsonType.INT.uniqueId to TypeRefer("int", "int", "", ""),
         JsonType.BOOL.uniqueId to TypeRefer("bool", "bool", "", ""),
@@ -33,9 +33,21 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
         JsonType.DOUBLE.uniqueId to TypeRefer("num", "num", "", ""),
     )
 
-    private val primitiveRefers = primitiveTypeRefers.values
+    private val emptyContainer = mapOf(
+        JsonType.EMPTY_ARRAY.uniqueId to TypeRefer("dynamic", "dynamic", "", "", array = true),
+        JsonType.EMPTY_OBJ.uniqueId to dynamic,
+        JsonType.UNKNOWN.uniqueId to dynamic,
+    )
 
+    private val primitiveRefers = primitiveTypeRefers.values + dynamic
     private val naming = DefaultNaming()
+
+    override fun getTypeRefer(type: JsonType): TypeRefer {
+        if (emptyContainer.containsKey(type.uniqueId)) {
+            return emptyContainer[type.uniqueId]!!
+        }
+        return super.getTypeRefer(type)
+    }
 
     override fun getDefaultTypeRefers(): Map<String, TypeRefer> = primitiveTypeRefers
 
@@ -53,9 +65,11 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
 
     private fun generateFile(type: JsonType, fileName: String, entityName: String, fields: Map<String, TypeRefer>) {
 
-        val imports = fields.values.toSet().distinctBy { it.name }.filter { it !in primitiveRefers }
+        val imports = fields.values.toSet().distinctBy { it.name }.map {
+            it.copy(array = false)
+        }.filter { it !in primitiveRefers }
         val fieldsNamed = fields.mapKeys {
-            naming.nameFiled(it.key)
+            naming.nameField(it.key)
         }
 
         val code = """
@@ -117,7 +131,7 @@ class $entityName {
                 else -> "json['$name']"
             }
         }
-        return "${naming.nameFiled(name)}: $value"
+        return "${naming.nameField(name)}: $value"
     }
 
     private fun fieldDeclare(name: String, refer: TypeRefer): String {
