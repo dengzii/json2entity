@@ -113,10 +113,11 @@ class $entityName {
     private fun genFieldFromJson(name: String, refer: TypeRefer): String {
         val value = if (refer !in primitiveRefers) {
             if (refer.array) {
+                val cast = " as Iterable"
                 if (refer.copy(array = false) in primitiveRefers) {
-                    "json['$name'] != null \n? json['$name'].map((e) => e).toList() \n: []"
+                    "json['$name'] != null \n? (json['$name']$cast).map((e) => e).toList() \n: []"
                 } else {
-                    "json['$name'] != null \n? json['$name'].map((e) => ${refer.name}.fromJson(e)).toList() \n: []"
+                    "json['$name'] != null \n? (json['$name']$cast).map((e) => ${refer.name}.fromJson(e)).toList() \n: []"
                 }
             } else {
                 "json['$name'] != null \n? ${refer.name}.fromJson(json['$name']) \n: null"
