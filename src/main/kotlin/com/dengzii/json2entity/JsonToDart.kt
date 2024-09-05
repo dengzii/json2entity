@@ -1,28 +1,11 @@
 package com.dengzii.json2entity
 
-import com.intellij.lang.ASTFactory
-import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.psi.PlainTextTokenTypes
-import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiFileFactory
-import com.intellij.psi.codeStyle.CodeStyleManager
-import com.jetbrains.lang.dart.DartLanguage
-import com.jetbrains.lang.dart.psi.DartFile
-import com.jetbrains.lang.dart.psi.impl.DartImportStatementImpl
-import com.jetbrains.lang.dart.psi.impl.DartVarDeclarationListImpl
-import com.jetbrains.lang.dart.util.DartElementGenerator
 
-class JsonToDart(private val param: GenerateParam?, name: String, input: String) :
-    Json2EntityParser(name, input, param) {
+class JsonToDart(
+    private val codeGenerator: CodeGenerator, private val param: GenerateParam, name: String, input: String
+) : Json2EntityParser(name, input, param) {
 
-    private val fileFactory by lazy { PsiFileFactory.getInstance(param!!.project) }
-    private val documentManager by lazy { PsiDocumentManager.getInstance(project) }
-    private val codeStyle by lazy { CodeStyleManager.getInstance(project) }
-    private val language = DartLanguage.INSTANCE
-
-    private val project = param!!.project
-
+    private val nullable = param.nullable
     private val dynamic = TypeRefer("dynamic", "dynamic", "", "")
 
     private val primitiveTypeRefers = mapOf(
@@ -40,7 +23,7 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
     )
 
     private val primitiveRefers = primitiveTypeRefers.values + dynamic
-    private val naming = DefaultNaming()
+    private val naming = DefaultNaming(suffix = param.suffix)
 
     override fun getTypeRefer(type: JsonType): TypeRefer {
         if (emptyContainer.containsKey(type.uniqueId)) {
@@ -55,117 +38,160 @@ class JsonToDart(private val param: GenerateParam?, name: String, input: String)
         val entityName = naming.nameEntity(name)
         val fileName = naming.nameFile(name, "dart")
         generateFile(type, fileName, entityName, fields)
-        if (param!!.directory.findFile(fileName) != null) {
-            log("file exist, skip $fileName")
-            return TypeRefer(entityName, fileName, "", "")
-        }
         log("gen type => $fileName, $entityName")
         return TypeRefer(entityName, fileName, "", "")
     }
 
-    private fun generateFile(type: JsonType, fileName: String, entityName: String, fields: Map<String, TypeRefer>) {
+    private fun generateFile(type: JsonType, fileName: String, entityName: String, jsonKeys: Map<String, TypeRefer>) {
 
-        val imports = fields.values.toSet().distinctBy { it.name }.map {
-            it.copy(array = false)
-        }.filter { it !in primitiveRefers }
-        val fieldsNamed = fields.mapKeys {
-            naming.nameField(it.key)
+        val sortedJsonKeys = jsonKeys.map {
+            it.key to it.value
+        }.sortedBy {
+            when (param.sort) {
+                FieldSort.Nullable, FieldSort.Type, FieldSort.TypeAndNullable -> when {
+                    it.second in primitiveRefers -> -1
+                    it.second.array -> 0
+                    else -> 1
+                }
+            }
+        }
+
+        val imports =
+            sortedJsonKeys.asSequence().map { it.second }.distinctBy { it.name }.map { it.copy(array = false) }
+                .filter { it !in primitiveRefers }.map { "import '${it.reference}';" }.joinToString("\n")
+
+        val jsonId = if (param.jsonId) "@pragma(\"json_id:${type.uniqueId}\")" else ""
+        val fields = sortedJsonKeys.joinToString("\n\t") { genFieldDeclare(it.first, it.second) }
+        val constructorParams = sortedJsonKeys.joinToString(",\n\t\t") { (key, t) -> genConstructParam(key, t) }
+
+        val toJson = if (param.genToJson) {
+            """
+    Map<String, dynamic> toJson() {
+        final Map<String, dynamic> data = new Map<String, dynamic>();
+        ${sortedJsonKeys.joinToString("\n\t\t") { genFieldToJsonPutMap("data", it.first, it.second) }}
+        ${
+                if (param.toJsonSkipNullKey) {
+                    "data.removeWhere((k, v) => v == null);"
+                } else {
+                    ""
+                }
+            }
+        return data;
+    }
+        """
+        } else {
+            ""
         }
 
         val code = """
-${imports.joinToString("\n") { "import '${it.reference}';" }}
+$imports
 
-@pragma("json_id:${type.uniqueId}")
+$jsonId
 class $entityName {
-    ${fieldsNamed.map { fieldDeclare(it.key, it.value) }.joinToString("\n")}
+    $fields
     
     $entityName({
-        ${fieldsNamed.map { (key, _) -> "\trequired this.$key" }.joinToString(",\n")},
+        $constructorParams,
     });
     
-    factory $entityName.fromJson(dynamic json) {
+    factory $entityName.fromJson(dynamic data) {
+        final json = data as Map<String, dynamic>;
         return $entityName(
-            ${fields.map { (k, t) -> genFieldFromJson(k, t) }.joinToString(",\n")},
+            ${sortedJsonKeys.joinToString(",\n\t\t\t") { (k, t) -> genFieldFromJson("json", k, t) }},
         );
     }
+    $toJson
 }
 """
-        val dartFile = fileFactory.createFileFromText(fileName, language, code) as DartFile
-
-        codeStyle.reformat(dartFile)
-
-        param!!.directory.add(dartFile)
-
-        val fdm = FileDocumentManager.getInstance()
-        val document = documentManager.getDocument(dartFile)!!
-        fdm.saveDocument(document)
-
-        val vf = fdm.getFile(document)
-        if (vf == null) {
-            log("file is null")
-            return
-        }
-        documentManager.doPostponedOperationsAndUnblockDocument(document)
-//        ReformatCodeProcessor(dartFile, false).run()
-        documentManager.commitDocument(document)
+        codeGenerator.generate(fileName, code)
     }
 
-    private fun genFieldFromJson(name: String, refer: TypeRefer): String {
+    private fun genConstructParam(key: String, refer: TypeRefer): String {
+        val name = naming.nameField(key)
+        val t = if (refer in primitiveRefers && !nullable) {
+            "required this.$name"
+        } else {
+            "this.$name"
+        }
+        return t
+    }
+
+    private fun genFieldFromJson(map: String, key: String, refer: TypeRefer): String {
+        var nullStat = ""
         val value = if (refer !in primitiveRefers) {
             if (refer.array) {
-                val cast = " as Iterable"
+                val cast = " as Iterable?"
+                nullStat = " ?? []"
                 if (refer.copy(array = false) in primitiveRefers) {
-                    "json['$name'] != null \n? (json['$name']$cast).map((e) => e).toList() \n: []"
+                    "($map['$key']$cast)?.map((e) => e).toList()"
                 } else {
-                    "json['$name'] != null \n? (json['$name']$cast).map((e) => ${refer.name}.fromJson(e)).toList() \n: []"
+                    "($map['$key']$cast)?.map((e) => ${refer.name}.fromJson(e)).toList()"
                 }
             } else {
-                "json['$name'] != null \n? ${refer.name}.fromJson(json['$name']) \n: null"
+                "$map['$key'] != null ? ${refer.name}.fromJson(json['$key']) : null"
             }
         } else {
-            when (refer) {
-                primitiveTypeRefers[JsonType.STRING.uniqueId] -> "json['$name'] ?? ''"
-                primitiveTypeRefers[JsonType.INT.uniqueId] -> "json['$name'] ?? 0"
-                primitiveTypeRefers[JsonType.BOOL.uniqueId] -> "json['$name'] ?? false"
-                primitiveTypeRefers[JsonType.FLOAT.uniqueId] -> "json['$name'] ?? 0.0"
-                primitiveTypeRefers[JsonType.DOUBLE.uniqueId] -> "json['$name'] ?? 0.0"
-                else -> "json['$name']"
+            nullStat = " ?? " + when (refer) {
+                primitiveTypeRefers[JsonType.STRING.uniqueId] -> "''"
+                primitiveTypeRefers[JsonType.INT.uniqueId] -> "0"
+                primitiveTypeRefers[JsonType.BOOL.uniqueId] -> "false"
+                primitiveTypeRefers[JsonType.FLOAT.uniqueId] -> "0"
+                primitiveTypeRefers[JsonType.DOUBLE.uniqueId] -> "0"
+                else -> "null"
             }
+            "$map['$key']"
         }
-        return "${naming.nameField(name)}: $value"
+
+        return "${naming.nameField(key)}: $value$nullStat"
     }
 
-    private fun fieldDeclare(name: String, refer: TypeRefer): String {
-        val type = if (refer in primitiveRefers) {
+    private fun genFieldToJsonPutMap(map: String, key: String, refer: TypeRefer): String {
+        val field = naming.nameField(key)
+        val value = if (refer !in primitiveRefers) {
+            if (refer.array) {
+                val nullable = if (param.nullable) "?" else ""
+                if (refer.copy(array = false) in primitiveRefers) {
+                    field
+                } else {
+                    "${field}$nullable.map((e) => e.toJson()).toList()"
+                }
+            } else {
+                "${field}?.toJson()"
+            }
+        } else {
+            field
+        }
+        return "$map['$key'] = $value;"
+    }
+
+    private fun genFieldDeclare(key: String, refer: TypeRefer): String {
+        val name = naming.nameField(key)
+        var type = if (refer in primitiveRefers || !refer.array) {
             refer.name
         } else {
-            if (refer.array) {
-                "List<${refer.name}>"
-            } else {
-                "${refer.name}?"
-            }
+            "List<${refer.name}>"
+        }
+        if (nullable && refer != dynamic) {
+            type = "$type?"
         }
         return "final $type ${name};"
     }
 
-    private fun generateFieldDeclare(refer: TypeRefer, name: String): PsiElement {
-        val file = DartElementGenerator.createDummyFile(project, "final ${refer.name} ${name};")
-        return file.firstChild
-    }
-
-    private fun TypeRefer.toImport(): DartImportStatementImpl? {
-        if (this.reference.isBlank() || this in primitiveRefers) return null
-        val stat = "import '${this.reference}.dart';"
-        val file = DartElementGenerator.createDummyFile(project, stat)
-        return file.firstChild as DartImportStatementImpl
-    }
-
-    private fun test(file: DartFile) {
-        ASTFactory.DefaultFactoryHolder.DEFAULT.createLeaf(
-            PlainTextTokenTypes.PLAIN_TEXT,
-            "final String name = 'dengzii';"
-        )
-        DartVarDeclarationListImpl(ASTFactory.whitespace("final String name = 'dengzii';"))
-        file.add(DartImportStatementImpl(ASTFactory.whitespace("import 'dart:io';")))
+    companion object {
+        @JvmStatic
+        fun main(arg: Array<String>) {
+            val jsonToDart = JsonToDart(
+                object : CodeGenerator {
+                    override fun generate(fileName: String, code: String) {
+                        log("generate => $fileName")
+                        log(code)
+                    }
+                }, GenerateParam(
+                    nullable = false, genToJson = true, toJsonSkipNullKey = true, suffix = "bean", jsonId = true
+                ), name = "hello_world", input = json2
+            )
+            jsonToDart.parseJson()
+            jsonToDart.generateTypes()
+        }
     }
 }

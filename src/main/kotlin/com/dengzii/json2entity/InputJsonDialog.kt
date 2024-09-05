@@ -45,10 +45,19 @@ class InputJsonDialog(private val e: AnActionEvent) : DialogWrapper(null, false,
             .removeSuffix("bean")
 
         val j2d = JsonToDart(
-            GenerateParam(
+            codeGenerator = DartCodeGenerator(
                 project = e.project!!,
                 directory = e.getActionDirectory()!!,
-            ), nm, json
+            ),
+            param = GenerateParam(
+                nullable = form.nullableForPrimitiveTypesCheckBox.isSelected,
+                genToJson = form.generateToJsonCheckBox.isSelected,
+                toJsonSkipNullKey = form.skipNullFieldCheckBox.isSelected,
+                suffix = form.beanTextField.text,
+                jsonId = form.generateJsonIdCheckBox.isSelected,
+            ),
+            name = nm,
+            input = json
         )
         FileWriteCommand.start(e, j2d)
     }

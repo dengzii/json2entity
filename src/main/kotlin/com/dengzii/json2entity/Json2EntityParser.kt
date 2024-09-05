@@ -1,7 +1,5 @@
 package com.dengzii.json2entity
 
-import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiDirectory
 import kotlinx.serialization.json.*
 
 
@@ -69,9 +67,19 @@ data class TypeRefer(
     }
 }
 
+enum class FieldSort {
+    Nullable,
+    Type,
+    TypeAndNullable,
+}
+
 class GenerateParam(
-    val project: Project,
-    val directory: PsiDirectory,
+    val nullable: Boolean,
+    val genToJson: Boolean,
+    val toJsonSkipNullKey: Boolean,
+    val jsonId: Boolean,
+    val suffix: String,
+    val sort: FieldSort = FieldSort.TypeAndNullable,
 )
 
 abstract class Json2EntityParser(private val name: String, private val input: String, param: GenerateParam?) {
@@ -86,6 +94,9 @@ abstract class Json2EntityParser(private val name: String, private val input: St
     private val node2type = HashMap<String, String>()
     private val type2ref = HashMap<String, TypeRefer>()
     private val type2node = HashMap<String, MutableList<String>>()
+
+    private val typeNames = HashSet<String>()
+
     private lateinit var json: JsonElement
 
     abstract fun getDefaultTypeRefers(): Map<String, TypeRefer>
@@ -103,7 +114,12 @@ abstract class Json2EntityParser(private val name: String, private val input: St
 
     open fun getTypeName(type: JsonType): String {
         val node = type2node[type.uniqueId]?.firstOrNull()
-        val name = node?.split(".")?.last() ?: type.uniqueId
+        var name = node?.split(".")?.last() ?: type.uniqueId
+        // avoid type name conflict
+        while (typeNames.contains(name)) {
+            name = "${name}_1"
+        }
+        typeNames.add(name)
         return name
     }
 
@@ -218,12 +234,6 @@ abstract class Json2EntityParser(private val name: String, private val input: St
     }
 
     companion object {
-        @JvmStatic
-        fun main(arg: Array<String>) {
-            val p = JsonToDart(null, "test_json", json1)
-            p.parseJson()
-            p.generateTypes()
-        }
 
         fun log(vararg args: Any) {
             val l = args.joinToString {
@@ -233,6 +243,19 @@ abstract class Json2EntityParser(private val name: String, private val input: St
         }
     }
 }
+
+const val json2 = """
+{
+    "f1":{
+        "hello": "world"
+    },
+    "f2": {
+        "f1": {
+        "hello": "world"
+         }
+    }
+}
+"""
 
 const val json1 = """
 {

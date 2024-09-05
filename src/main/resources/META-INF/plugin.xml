@@ -17,10 +17,15 @@
     Generate dart data class from json text.<br>
     <br>
     Create dart data class from json text, support nested data class structure creation, the same structure will generate the same data class.
-    Naming of the data class is based on the json key name and with the suffix `bean`, file name is lower case, class name is upper camel case.
+
+    Naming of the data class is based on the json key name and with the custom suffix, file name is lower case, class name is upper camel case.
     field name is lower camel case.
 
+    Primitive types and array is optional nullable.
+
     json type float and double will convert to dart type `num`.
+
+    All code will be formatted after generate.
     <br>
     Usage:
     Right-click on the directory where you want to generate the dart data class, then select the `New` menu, finally select `Json to Dart Entity`.
