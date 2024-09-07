@@ -117,13 +117,15 @@ class $entityName {
     }
 
     private fun genFieldFromJson(map: String, key: String, refer: TypeRefer): String {
+        // fixme nullable bug
         var nullStat = ""
         val value = if (refer !in primitiveRefers) {
             if (refer.array) {
                 val cast = " as Iterable?"
                 nullStat = " ?? []"
                 if (refer.copy(array = false) in primitiveRefers) {
-                    "($map['$key']$cast)?.map((e) => e).toList()"
+                    val cast1 = if(refer == dynamic) "" else " as ${refer.reference}"
+                    "($map['$key']$cast)?.map((e) => e${cast1}).toList()"
                 } else {
                     "($map['$key']$cast)?.map((e) => ${refer.name}.fromJson(e)).toList()"
                 }
