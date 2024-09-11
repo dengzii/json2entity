@@ -14,23 +14,19 @@
          Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description><![CDATA[
-    Generate dart data class from json text.<br>
+    Generate Dart data class from json text.<br>
     <br>
-    Create dart data class from json text, support nested data class structure creation, the same structure will generate the same data class.
-
+    Create dart data class from json text, support nested data class structure creation, the same structure will generate the same data class.<br>
     Naming of the data class is based on the json key name and with the custom suffix, file name is lower case, class name is upper camel case.
-    field name is lower camel case.
+    field name is lower camel case.<br>
 
-    Primitive types and array is optional nullable.
+    Primitive types and array is optional nullable.<br>
 
-    json type float and double will convert to dart type `num`.
+    json type float and double will convert to dart type `num`.<br>
 
-    All code will be formatted after generate.
-    <br>
-    Usage:
-    Right-click on the directory where you want to generate the dart data class, then select the `New` menu, finally select `Json to Dart Entity`.
-    <br>
-    <em>Support language: Dart</em>
+    All code will be formatted after generate.<br>
+
+    <em>Support language: Dart Only</em>
   ]]></description>
 
     <!-- Product and plugin compatibility requirements.

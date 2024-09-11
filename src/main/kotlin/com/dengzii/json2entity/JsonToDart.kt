@@ -64,21 +64,16 @@ class JsonToDart(
         val fields = sortedJsonKeys.joinToString("\n\t") { genFieldDeclare(it.first, it.second) }
         val constructorParams = sortedJsonKeys.joinToString(",\n\t\t") { (key, t) -> genConstructParam(key, t) }
 
+        val filterNull = if (param.toJsonSkipNullKey) "d\n\t\tfata.removeWhere((k, v) => v == null);" else ""
+
         val toJson = if (param.genToJson) {
             """
     Map<String, dynamic> toJson() {
-        final Map<String, dynamic> data = new Map<String, dynamic>();
-        ${sortedJsonKeys.joinToString("\n\t\t") { genFieldToJsonPutMap("data", it.first, it.second) }}
-        ${
-                if (param.toJsonSkipNullKey) {
-                    "data.removeWhere((k, v) => v == null);"
-                } else {
-                    ""
-                }
-            }
+        final Map<String, dynamic> data = <String, dynamic>{};
+        ${sortedJsonKeys.joinToString("\n\t\t") { genFieldToJsonPutMap("data", it.first, it.second) }} $filterNull
         return data;
     }
-        """
+"""
         } else {
             ""
         }
@@ -108,7 +103,8 @@ class $entityName {
 
     private fun genConstructParam(key: String, refer: TypeRefer): String {
         val name = naming.nameField(key)
-        val t = if (refer in primitiveRefers && !nullable) {
+        val isPrimitiveOrArray = refer in primitiveRefers || refer.array
+        val t = if (isPrimitiveOrArray && !nullable) {
             "required this.$name"
         } else {
             "this.$name"
@@ -117,14 +113,13 @@ class $entityName {
     }
 
     private fun genFieldFromJson(map: String, key: String, refer: TypeRefer): String {
-        // fixme nullable bug
         var nullStat = ""
         val value = if (refer !in primitiveRefers) {
             if (refer.array) {
                 val cast = " as Iterable?"
                 nullStat = " ?? []"
                 if (refer.copy(array = false) in primitiveRefers) {
-                    val cast1 = if(refer == dynamic) "" else " as ${refer.reference}"
+                    val cast1 = if (refer == dynamic) "" else " as ${refer.reference}"
                     "($map['$key']$cast)?.map((e) => e${cast1}).toList()"
                 } else {
                     "($map['$key']$cast)?.map((e) => ${refer.name}.fromJson(e)).toList()"
