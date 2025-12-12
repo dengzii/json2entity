@@ -58,7 +58,7 @@ class JsonToDart(
 
         val imports =
             sortedJsonKeys.asSequence().map { it.second }.distinctBy { it.name }.map { it.copy(array = false) }
-                .filter { it !in primitiveRefers }.map { "import '${it.reference}';" }.joinToString("\n")
+                .filter { it !in primitiveRefers }.joinToString("\n") { "import '${it.reference}';" }
 
         val jsonId = if (param.jsonId) "@pragma(\"json_id:${type.uniqueId}\")" else ""
         val fields = sortedJsonKeys.joinToString("\n\t") { genFieldDeclare(it.first, it.second) }

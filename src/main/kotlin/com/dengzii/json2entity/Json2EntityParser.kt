@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package com.dengzii.json2entity
 
 import kotlinx.serialization.json.*
@@ -185,7 +187,7 @@ abstract class Json2EntityParser(private val name: String, private val input: St
         } else {
             val type = jsonArray[0].parseType(node, depth = depth + 1)
             JsonType.array(type.uniqueId)
-        };
+        }
     }
 
     private fun JsonPrimitive.parseType(): JsonType {
@@ -223,7 +225,6 @@ abstract class Json2EntityParser(private val name: String, private val input: St
             is JsonArray -> parseType(node, depth)
             is JsonPrimitive -> parseType()
             is JsonObject -> parseType(node, depth)
-            else -> JsonType.UNKNOWN
         }
         types.add(type)
         node2type[node] = type.uniqueId
